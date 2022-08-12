@@ -16,7 +16,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	"net/http/pprof"
 	"sort"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -68,10 +68,22 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	h.ServeHTTP(w, r)
 }
 
+func registerPprof(mux *http.ServeMux, enabled bool) {
+	if !enabled {
+		return
+	}
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+}
+
 func main() {
 	var (
 		listenAddress = kingpin.Flag("web.listen-address", "Address on which to expose metrics and web interface.").Default(":9100").String()
 		metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
+		pprofEnabled  = kingpin.Flag("pprof.enabled", "Enables pprof for debug usage").Default("false").Bool()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -96,9 +108,10 @@ func main() {
 	for _, n := range collectors {
 		log.Infof(" - %s", n)
 	}
-
-	http.HandleFunc(*metricsPath, handler)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	registerPprof(mux, *pprofEnabled)
+	mux.HandleFunc(*metricsPath, handler)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
 			<head><title>Node Exporter</title></head>
 			<body>
@@ -109,7 +122,7 @@ func main() {
 	})
 
 	log.Infoln("Listening on", *listenAddress)
-	err = http.ListenAndServe(*listenAddress, nil)
+	err = http.ListenAndServe(*listenAddress, mux)
 	if err != nil {
 		log.Fatal(err)
 	}

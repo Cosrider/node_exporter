@@ -1,0 +1,7 @@
+FROM        192.168.90.141/system_containers/busybox:1.27.2
+
+COPY node_exporter /bin/node_exporter
+
+EXPOSE      9100
+USER        nobody
+ENTRYPOINT  [ "/bin/node_exporter" ]
